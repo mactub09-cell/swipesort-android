@@ -137,7 +137,7 @@ private fun SwipeSortApp(
                     ) {
                         Column {
                             Text("SwipeSort", fontSize = 26.sp, fontWeight = FontWeight.Black)
-                            Text("Порядок в скриншотах · v0.4.0", fontSize = 12.sp,
+                            Text("Порядок в скриншотах · v0.5.0", fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Text("✦", fontSize = 28.sp, color = MaterialTheme.colorScheme.primary)
@@ -206,7 +206,9 @@ private fun SwipeSortApp(
                                 classificationRemaining = model.shots.count {
                                     it.category == "Без категории" && it.decision != Decision.PENDING_DELETE &&
                                         !context.getSharedPreferences("shot_decisions", Context.MODE_PRIVATE)
-                                            .getBoolean("v04_done:${it.uri}", false)
+                                            .getBoolean("v05_done:${it.uri}", false) &&
+                                        !context.getSharedPreferences("shot_decisions", Context.MODE_PRIVATE)
+                                            .getBoolean("manual_category:${it.uri}", false)
                                 },
                                 classificationStatus = model.classificationStatus
                             )
@@ -442,11 +444,13 @@ private fun CategoryHome(
                 color = MaterialTheme.colorScheme.secondaryContainer) {
                 Column(Modifier.padding(14.dp)) {
                     Text("Умная сортировка", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Text("Сначала русский и английский текст, затем визуальные объекты. " +
-                        "Всё на телефоне, без отправки скриншотов в интернет. " +
-                        "Неуверенные результаты останутся в «Без категории».", fontSize = 12.sp)
+                    Text("Текст и изображение оцениваются вместе. " +
+                        "Категории с низкой уверенностью помечаются для проверки. " +
+                        "Всё работает локально, без отправки фото в интернет.", fontSize = 12.sp)
+                    Text("Версия 0.5 повторно проверит старые файлы «Без категории». " +
+                        "Ручные назначения не меняются.", fontSize = 11.sp)
                     Spacer(Modifier.height(5.dp))
-                    Text("Проанализировано $classificationCompleted из $classificationTotal · осталось $classificationRemaining", fontSize = 12.sp)
+                    Text("Проверено алгоритмом 0.5: $classificationCompleted · ожидают: $classificationRemaining", fontSize = 12.sp)
                     classificationStatus?.let { Text(it, fontSize = 12.sp) }
                     Spacer(Modifier.height(8.dp))
                     if (classificationActive) {
@@ -492,6 +496,11 @@ private fun CategoryHome(
                     Spacer(Modifier.height(3.dp))
                     Text("${contents.size} · ${formatSize(contents.sumOf { it.size })}",
                         color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    val reviewCount = contents.count { it.needsReview }
+                    if (reviewCount > 0) {
+                        Text("Проверить: $reviewCount", fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
         }
@@ -527,7 +536,8 @@ private fun CategoryDetail(category: String, shots: List<Shot>,
                 ) {
                     AsyncImage(model = shot.uri, contentDescription = shot.name,
                         contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                    Text(statusLabel(shot.decision), modifier = Modifier.align(Alignment.BottomEnd)
+                    Text(if (shot.needsReview) "? Проверить" else statusLabel(shot.decision),
+                        modifier = Modifier.align(Alignment.BottomEnd)
                         .background(Color.Black.copy(alpha = .72f), RoundedCornerShape(topStart = 8.dp))
                         .padding(5.dp), color = Color.White, fontSize = 11.sp)
                 }
@@ -739,7 +749,7 @@ private fun ShotInspection(shot: Shot, onClose: () -> Unit,
                     modifier = Modifier.fillMaxWidth().height(240.dp),
                     contentScale = ContentScale.Fit)
                 Spacer(Modifier.height(10.dp))
-                Text("${shot.category} · ${formatSize(shot.size)}", fontSize = 13.sp)
+                Text("${shot.category}${if (shot.needsReview) " · предложено ИИ, проверь" else ""} · ${formatSize(shot.size)}", fontSize = 13.sp)
                 TextButton(onClick = onCategorize) { Text("Изменить категорию") }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     TextButton(onClick = { onDecision(Decision.NEW) }) { Text("↩ Вернуть") }
@@ -773,6 +783,7 @@ private fun categoryEmoji(cat: String): String = when (cat) {
     "Здоровье" -> "💊"
     "Документы" -> "📄"
     "Дети и игры" -> "🧸"
+    "Дети и воспитание" -> "👨‍👩‍👧"
     "Животные" -> "🐈"
     "Еда и напитки" -> "🍰"
     "Природа" -> "🌿"

@@ -40,14 +40,15 @@ internal data class Shot(
     val size: Long,
     val date: Long,
     val category: String,
-    val decision: Decision
+    val decision: Decision,
+    val needsReview: Boolean = false
 )
 
 internal val groups = listOf(
     "Без категории", "Покупки", "Цены и скидки", "Чеки и платежи",
     "Рецепты", "Здоровье", "Работа и учёба", "Переписки",
     "Путешествия", "Красота и стиль", "Дом", "Дети и игры",
-    "Мемы", "Полезные советы", "Документы", "Животные", "Еда и напитки", "Природа", "Другое"
+    "Мемы", "Полезные советы", "Документы", "Животные", "Еда и напитки", "Природа", "Дети и воспитание", "Другое"
 )
 
 internal fun hasPhotoAccess(context: Context): Boolean {
@@ -107,7 +108,7 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val result = withContext(Dispatchers.IO) { readScreenshots(context) }
                 shots = result.shots
-                ocrProcessed = result.shots.count { preferences.getBoolean("v04_done:${it.uri}", false) }
+                ocrProcessed = result.shots.count { preferences.getBoolean("v05_done:${it.uri}", false) }
                 scanReport = result.report
                 message = when {
                     result.report.queryReturnedNull -> "Android не вернул список изображений (MediaStore query = null)."
@@ -175,7 +176,8 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
                     size = cursor.getLong(sizeIdx).coerceAtLeast(0L),
                     date = cursor.getLong(dateIdx),
                     category = category,
-                    decision = decision
+                    decision = decision,
+                    needsReview = preferences.getBoolean("category_needs_review:$uri", false)
                 )
             }
         }
@@ -188,7 +190,7 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
         val context = getApplication<Application>()
         val candidates = shots.filter {
             it.category == "Без категории" &&
-                !preferences.getBoolean("v04_done:${it.uri}", false) &&
+                !preferences.getBoolean("v05_done:${it.uri}", false) &&
                 it.decision != Decision.PENDING_DELETE
         }.take(batchSize)
         if (candidates.isEmpty()) {
@@ -199,6 +201,7 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
             isClassifying = true
             classificationStatus = "Загружаем локальные модели…"
             var identified = 0
+            var needsReview = 0
             var unknown = 0
             var failures = 0
             var completedSoFar = ocrProcessed
@@ -206,7 +209,7 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.IO) {
                     HybridClassifier(context).use { classifier ->
                         // Batch UI changes instead of rebuilding a list of 5,000 shots for every result.
-                        val pending = mutableMapOf<Uri, String>()
+                        val pending = mutableMapOf<Uri, Pair<String, Boolean>>()
                         suspend fun flush() {
                             if (pending.isEmpty()) return
                             val changes = pending.toMap()
@@ -215,7 +218,7 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
                                 shots = shots.map { item ->
                                     val proposed = changes[item.uri]
                                     if (proposed != null && item.category == "Без категории")
-                                        item.copy(category = proposed)
+                                        item.copy(category = proposed.first, needsReview = proposed.second)
                                     else item
                                 }
                             }
@@ -223,27 +226,31 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
                         candidates.forEachIndexed { index, shot ->
                             coroutineContext.ensureActive()
                             try {
-                                val skipOcr = preferences.getBoolean("ocr_done:${shot.uri}", false)
-                                val result = classifier.analyze(shot, skipOcr)
+                                // v0.5 re-reads OCR even for older v0.4 misses: fusion needs both signals.
+                                val result = classifier.analyze(shot)
                                 if (!result.analyzed) {
                                     failures++
                                 } else {
                                     // Never overwrite a category manually chosen while analysis ran.
-                                    val mayAssign = preferences.getString(
+                                    val mayAssign = !preferences.getBoolean(
+                                        "manual_category:${shot.uri}", false
+                                    ) && preferences.getString(
                                         "category:${shot.uri}", "Без категории"
                                     ) == "Без категории"
                                     preferences.edit().apply {
-                                        putBoolean("v04_done:${shot.uri}", true)
+                                        putBoolean("v05_done:${shot.uri}", true)
                                         if (result.ocrCompleted) putBoolean("ocr_done:${shot.uri}", true)
                                         if (result.category != null && mayAssign) {
                                             putString("category:${shot.uri}", result.category)
+                                            putBoolean("category_needs_review:${shot.uri}", result.needsReview)
                                         }
                                         apply()
                                     }
                                     completedSoFar++
                                     if (result.category != null && mayAssign) {
-                                        pending[shot.uri] = result.category
+                                        pending[shot.uri] = result.category to result.needsReview
                                         identified++
+                                        if (result.needsReview) needsReview++
                                     } else {
                                         unknown++
                                     }
@@ -256,13 +263,15 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
                                 withContext(Dispatchers.Main) {
                                     ocrProcessed = completedSoFar
                                     classificationStatus = "Обработано ${index + 1} из ${candidates.size} · " +
-                                        "найдено тем: $identified · без темы: $unknown · ошибок: $failures"
+                                        "найдено тем: $identified (проверить: $needsReview) · " +
+                                        "без темы: $unknown · ошибок: $failures"
                                 }
                             }
                         }
                     }
                 }
-                classificationStatus = "Готово: распределено $identified, без темы $unknown, ошибок $failures. " +
+                classificationStatus = "Готово: распределено $identified (проверить: $needsReview), " +
+                    "без темы $unknown, ошибок $failures. " +
                     "Продолжи сортировку или проверь папки."
             } catch (cancel: CancellationException) {
                 classificationStatus = "Остановлено. Уже обработанные результаты сохранены."
@@ -294,8 +303,12 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun assign(shot: Shot, category: String) {
-        preferences.edit().putString("category:${shot.uri}", category).apply()
-        shots = shots.map { if (it.uri == shot.uri) it.copy(category = category) else it }
+        preferences.edit()
+            .putString("category:${shot.uri}", category)
+            .putBoolean("manual_category:${shot.uri}", true)
+            .remove("category_needs_review:${shot.uri}")
+            .apply()
+        shots = shots.map { if (it.uri == shot.uri) it.copy(category = category, needsReview = false) else it }
     }
 
     fun afterConfirmedTrash(items: List<Shot>) {
@@ -305,6 +318,9 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
                 remove("category:${it.uri}")
                 remove("ocr_done:${it.uri}")
                 remove("v04_done:${it.uri}")
+                remove("v05_done:${it.uri}")
+                remove("manual_category:${it.uri}")
+                remove("category_needs_review:${it.uri}")
             }
             apply()
         }

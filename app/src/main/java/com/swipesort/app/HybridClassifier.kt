@@ -21,35 +21,29 @@ internal class HybridClassifier(private val context: Context) : AutoCloseable {
         val category: String?,
         val method: String?,
         val ocrCompleted: Boolean,
-        val analyzed: Boolean
+        val analyzed: Boolean,
+        val needsReview: Boolean = false
     )
 
-    fun analyze(shot: Shot, skipOcr: Boolean): Result {
+    fun analyze(shot: Shot): Result {
         val bitmap = loadPreview(shot.uri) ?: return Result(null, null, false, false)
         try {
-            var textCategory: String? = null
-            var ocrCompleted = skipOcr
-            if (!skipOcr) {
-                try {
-                    val engine = ocr ?: OfflineClassifier(context).also { ocr = it }
-                    // We reuse the same bitmap for OCR and visual labeling.
-                    textCategory = engine.categoryOfBitmap(bitmap)
-                    ocrCompleted = true
-                } catch (_: Exception) {
-                    // A failed OCR pass should not disable the visual classifier.
-                }
-            }
-            if (textCategory != null) return Result(textCategory, "Текст", ocrCompleted, true)
-            return try {
-                val labels = Tasks.await(labeler.process(InputImage.fromBitmap(bitmap, 0)))
-                    .map { VisualLabel(it.text, it.confidence) }
-                val visualCategory = detectVisualCategory(labels)
-                Result(visualCategory, if (visualCategory == null) null else "Изображение",
-                    ocrCompleted, true)
+            var recognizedText = ""
+            var ocrCompleted = false
+            try {
+                val engine = ocr ?: OfflineClassifier(context).also { ocr = it }
+                recognizedText = engine.readText(bitmap)
+                ocrCompleted = true
             } catch (_: Exception) {
-                // A successful OCR pass with no keywords still counts as analyzed.
-                Result(null, null, ocrCompleted, ocrCompleted)
+                // Do not block local image labeling when OCR is unavailable.
             }
+            val labels = try {
+                Tasks.await(labeler.process(InputImage.fromBitmap(bitmap, 0)))
+                    .map { VisualLabel(it.text, it.confidence) }
+            } catch (_: Exception) { emptyList() }
+            val proposal = rankCategory(recognizedText, labels)
+            return Result(proposal?.category, proposal?.explanation, ocrCompleted,
+                ocrCompleted || labels.isNotEmpty(), proposal?.needsReview ?: false)
         } finally {
             bitmap.recycle()
         }

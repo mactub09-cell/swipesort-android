@@ -1,0 +1,25 @@
+SwipeSort 0.5.0 — improved local category sorting
+
+What changed:
+- OCR and on-device visual labels are now scored jointly, instead of using either/or.
+- New separate category "Дети и воспитание"; better differentiation of recipes, shopping, household appliances/instructions, and school materials.
+- Low-confidence category proposals are shown as "? Проверить" in the grid, and counted in each folder.
+- Previously OCR-checked but uncategorized v0.4 items are eligible for re-analysis with the newer rules.
+- Manual category assignments (made from now on) are preserved. Existing non-empty categories are not overwritten.
+- Previous KEEP, SKIPPED and PENDING_DELETE decisions remain untouched.
+- Uses existing local Tesseract & bundled ML Kit models, with no internet permission or network feature.
+- Keeps the Preview package id com.swipesort.app.preview and the GitHub Actions signing configuration from 0.4.1.
+
+Important:
+- No automatic deletion.
+- Rule scores are heuristics, NOT calibrated neural probabilities.
+- This is not a full VLM like Gemma. Accuracy on 5,000 photos has not been measured.
+- Run a 40-file batch first, inspect at least 10 results, including items marked ?.
+- Do not automatically mass-delete any category without reviewing thumbnails.
+- v0.4 category assignments remain untouched; new analysis focuses on uncategorized files.
+- Installing the Preview app does not automatically migrate the older main SwipeSort app's local decisions.
+
+Tested here:
+- 11 JVM offline category-rule checks passed (tests/TestSmartCategoryRules.kt).
+Not tested here:
+- Full Android Gradle build or performance/accuracy on the phone.

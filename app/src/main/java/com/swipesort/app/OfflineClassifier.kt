@@ -36,10 +36,10 @@ internal class OfflineClassifier(private val context: Context) : AutoCloseable {
     }
 
     /** Reuses the bitmap already decoded by HybridClassifier. */
-    fun categoryOfBitmap(bitmap: Bitmap): String? {
+    fun readText(bitmap: Bitmap): String {
         try {
             tess.setImage(bitmap)
-            return detectCategory(tess.getUTF8Text().orEmpty())
+            return tess.getUTF8Text().orEmpty()
         } finally {
             tess.clear()
         }

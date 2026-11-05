@@ -14,8 +14,8 @@ android {
         applicationId = "com.swipesort.app.preview"
         minSdk = 30
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.4.1-preview"
+        versionCode = 6
+        versionName = "0.5.0-preview"
     }
     buildFeatures { compose = true }
     compileOptions {
