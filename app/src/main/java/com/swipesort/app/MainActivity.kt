@@ -25,6 +25,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
@@ -100,13 +101,13 @@ private fun SwipeSortApp(
 
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var openedCategory by rememberSaveable { mutableStateOf<String?>(null) }
-    var reviewCategory by rememberSaveable { mutableStateOf("Все") }
+    var reviewCategory by remember { mutableStateOf("Все") }
     var pickCategoryFor by remember { mutableStateOf<Shot?>(null) }
     var inspectShot by remember { mutableStateOf<Shot?>(null) }
     var bulkCategory by remember { mutableStateOf<String?>(null) }
     var showTrashConfirmation by remember { mutableStateOf(false) }
     var pendingConfirmation by remember { mutableStateOf<List<Shot>>(emptyList()) }
-    var diagnosticsExpanded by rememberSaveable { mutableStateOf(true) }
+    var diagnosticsExpanded by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -136,7 +137,7 @@ private fun SwipeSortApp(
                     ) {
                         Column {
                             Text("SwipeSort", fontSize = 26.sp, fontWeight = FontWeight.Black)
-                            Text("Порядок в скриншотах · v0.2.0", fontSize = 12.sp,
+                            Text("Порядок в скриншотах · v0.3.0", fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Text("✦", fontSize = 28.sp, color = MaterialTheme.colorScheme.primary)
@@ -150,7 +151,7 @@ private fun SwipeSortApp(
                     menu.forEach { (symbol, label, index) ->
                         NavigationBarItem(
                             selected = tab == index,
-                            onClick = { tab = index; openedCategory = null },
+                            onClick = { tab = index; openedCategory = null; if (index == 1) reviewCategory = "Все" },
                             icon = { Text(symbol, fontSize = 22.sp) },
                             label = { Text(label) }
                         )
@@ -195,7 +196,14 @@ private fun SwipeSortApp(
                             CategoryHome(model.shots,
                                 onSelect = { openedCategory = it },
                                 onReview = { reviewCategory = "Все"; tab = 1 },
-                                onRefresh = { model.refresh() }
+                                onRefresh = { model.refresh() },
+                                onAutoSort = { model.classifyNextBatch(40) },
+                                onAutoSortAll = { model.classifyNextBatch(model.shots.size) },
+                                onStopAutoSort = { model.stopClassifying() },
+                                classificationActive = model.isClassifying,
+                                classificationCompleted = model.ocrProcessed,
+                                classificationTotal = model.shots.size,
+                                classificationStatus = model.classificationStatus
                             )
                         } else {
                             CategoryDetail(
@@ -305,50 +313,55 @@ private fun DiagnosticPanel(
     onExpand: () -> Unit,
     onRecheck: () -> Unit
 ) {
-    val imgGrant = ContextCompat.checkSelfPermission(
-        context, Manifest.permission.READ_MEDIA_IMAGES
-    ) == PackageManager.PERMISSION_GRANTED
-    val selectedGrant = Build.VERSION.SDK_INT >= 34 && ContextCompat.checkSelfPermission(
-        context, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
-    ) == PackageManager.PERMISSION_GRANTED
-    val storageGrant = Build.VERSION.SDK_INT < 33 && ContextCompat.checkSelfPermission(
-        context, Manifest.permission.READ_EXTERNAL_STORAGE
-    ) == PackageManager.PERMISSION_GRANTED
     val accessText = when (accessLevel) {
-        2 -> "полный"
+        2 -> "полный доступ"
         1 -> "выбранные фото"
         else -> "нет доступа"
     }
+    // Never put the multiline diagnostic dump inside the main screen's Column.
+    // Even with 5,000 loaded screenshots it must not consume the swiping viewport.
     Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)) {
-            TextButton(onClick = onExpand) {
-                Text("Диагностика v0.2.0 · $accessText ${if (expanded) "▲" else "▼"}")
-            }
-            if (expanded) {
-                Text(
-                    "Android API ${Build.VERSION.SDK_INT} · READ_MEDIA_IMAGES: $imgGrant · " +
-                        "VISUAL_USER_SELECTED: $selectedGrant · READ_EXTERNAL_STORAGE: $storageGrant",
-                    fontSize = 11.sp
-                )
-                Text(
-                    "MediaStore: ${report?.visibleImages ?: "—"} изображений; " +
-                        "скриншотов: ${report?.screenshotCandidates ?: "—"}",
-                    fontSize = 12.sp
-                )
-                report?.sampleFileNames?.takeIf { it.isNotEmpty() }?.let { names ->
-                    Text("Примеры имён: ${names.joinToString("; ")}", fontSize = 11.sp)
-                }
-                message?.let { Text("Статус: $it", fontSize = 12.sp) }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton(onClick = onRecheck) { Text("Проверить снова") }
+        Row(Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("📷 ${report?.screenshotCandidates ?: "—"} скриншотов · $accessText",
+                modifier = Modifier.weight(1f), maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelMedium)
+            TextButton(onClick = onExpand) { Text("Диагностика ⚙", fontSize = 12.sp) }
+        }
+    }
+    if (expanded) {
+        val imgGrant = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.READ_MEDIA_IMAGES
+        ) == PackageManager.PERMISSION_GRANTED
+        val selectedGrant = Build.VERSION.SDK_INT >= 34 && ContextCompat.checkSelfPermission(
+            context, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+        ) == PackageManager.PERMISSION_GRANTED
+        AlertDialog(
+            onDismissRequest = onExpand,
+            title = { Text("Диагностика · v0.3.0") },
+            text = {
+                Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    Text("Android API ${Build.VERSION.SDK_INT}")
+                    Text("Полный доступ: $imgGrant · выбранные: $selectedGrant")
+                    Text("MediaStore: ${report?.visibleImages ?: "—"} изображений")
+                    Text("Распознано как скриншоты: ${report?.screenshotCandidates ?: "—"}")
+                    message?.let { Text("Ошибка: $it") }
+                    report?.sampleFileNames?.let { names ->
+                        Spacer(Modifier.height(12.dp))
+                        Text("Примеры файлов:", fontWeight = FontWeight.Bold)
+                        names.forEach { Text(it, fontSize = 11.sp) }
+                    }
+                    TextButton(onClick = { onRecheck(); onExpand() }) { Text("Пересканировать") }
                     TextButton(onClick = {
-                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                            Uri.parse("package:${context.packageName}"))
-                        context.startActivity(intent)
+                        context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:${context.packageName}")))
                     }) { Text("Разрешения Android") }
                 }
-            }
-        }
+            },
+            confirmButton = { TextButton(onClick = onExpand) { Text("Закрыть") } }
+        )
     }
 }
 
@@ -372,74 +385,106 @@ private fun PermissionContent(onRequest: () -> Unit) {
 }
 
 @Composable
-private fun CategoryHome(shots: List<Shot>, onSelect: (String) -> Unit,
-                         onReview: () -> Unit, onRefresh: () -> Unit) {
+private fun CategoryHome(
+    shots: List<Shot>,
+    onSelect: (String) -> Unit,
+    onReview: () -> Unit,
+    onRefresh: () -> Unit,
+    onAutoSort: () -> Unit,
+    onAutoSortAll: () -> Unit,
+    onStopAutoSort: () -> Unit,
+    classificationActive: Boolean,
+    classificationCompleted: Int,
+    classificationTotal: Int,
+    classificationStatus: String?
+) {
     val kept = shots.count { it.decision == Decision.KEEP }
     val queued = shots.count { it.decision == Decision.PENDING_DELETE }
     val finished = shots.count { it.decision != Decision.NEW }
-    Column(Modifier.fillMaxSize()) {
-        Surface(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            shape = RoundedCornerShape(22.dp),
-            color = MaterialTheme.colorScheme.primaryContainer
-        ) {
-            Column(Modifier.padding(20.dp)) {
-                Text("Найдено скриншотов", fontSize = 14.sp)
-                Text("${shots.size}", fontSize = 42.sp, fontWeight = FontWeight.Black)
-                Text("Оставлено $kept · В очереди $queued", fontSize = 13.sp)
-                Spacer(Modifier.height(14.dp))
-                LinearProgressIndicator(
-                    progress = { if (shots.isEmpty()) 0f else finished.toFloat() / shots.size },
-                    modifier = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(8.dp))
-                )
-                Spacer(Modifier.height(8.dp))
-                Text("Разобрано $finished из ${shots.size}", fontSize = 12.sp)
-                Spacer(Modifier.height(14.dp))
-                Button(onClick = onReview, modifier = Modifier.fillMaxWidth(),
-                    enabled = shots.isNotEmpty()) { Text("Начать разбор →") }
+    val cards = listOf("Все", "Без категории") + groups.drop(1)
+
+    // One scrollable grid. A separate, non-scrolling header could leave zero space for images.
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Surface(shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.primaryContainer) {
+                Column(Modifier.padding(18.dp)) {
+                    Text("Найдено скриншотов", fontSize = 14.sp)
+                    Text("${shots.size}", fontSize = 36.sp, fontWeight = FontWeight.Black)
+                    Text("Оставлено $kept · В очереди $queued", fontSize = 13.sp)
+                    Spacer(Modifier.height(10.dp))
+                    LinearProgressIndicator(
+                        progress = { if (shots.isEmpty()) 0f else finished.toFloat() / shots.size },
+                        modifier = Modifier.fillMaxWidth().height(6.dp)
+                    )
+                    Text("Разобрано $finished из ${shots.size}", fontSize = 12.sp)
+                    Spacer(Modifier.height(10.dp))
+                    Button(onClick = onReview, modifier = Modifier.fillMaxWidth(), enabled = shots.isNotEmpty()) {
+                        Text("Начать разбор всех скриншотов →")
+                    }
+                }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically) {
-            Text("Мои категории", fontSize = 21.sp, fontWeight = FontWeight.Bold)
-            TextButton(onClick = onRefresh) { Text("Обновить") }
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Surface(shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer) {
+                Column(Modifier.padding(14.dp)) {
+                    Text("Автосортировка по содержимому", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text("Локальное распознавание русского и английского текста. " +
+                        "Неопределённое остаётся без категории.", fontSize = 12.sp)
+                    Spacer(Modifier.height(5.dp))
+                    Text("Проверено: $classificationCompleted из $classificationTotal", fontSize = 12.sp)
+                    classificationStatus?.let { Text(it, fontSize = 12.sp) }
+                    Spacer(Modifier.height(8.dp))
+                    if (classificationActive) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        TextButton(onClick = onStopAutoSort) { Text("Остановить") }
+                    } else {
+                        Button(onClick = onAutoSort, enabled = classificationCompleted < classificationTotal,
+                            modifier = Modifier.fillMaxWidth()) { Text("Проверить следующие 40") }
+                        OutlinedButton(onClick = onAutoSortAll,
+                            enabled = classificationCompleted < classificationTotal,
+                            modifier = Modifier.fillMaxWidth()) { Text("Сортировать все оставшиеся") }
+                        Text("При большой галерее это длительная операция. " +
+                            "Держи приложение открытым; результаты сохраняются по мере обработки.", fontSize = 11.sp)
+                    }
+                }
+            }
         }
-        val cards = listOf("Все", "Без категории") + groups.drop(1)
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(cards, key = { it }) { cat ->
-                val contents = matchingShots(shots, cat)
-                Card(
-                    onClick = { onSelect(cat) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Box(Modifier.fillMaxWidth().height(104.dp)) {
-                        if (contents.isNotEmpty()) AsyncImage(
-                            model = contents.first().uri,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        ) else Box(Modifier.fillMaxSize().background(
-                            MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically) {
+                Text("Тематические папки", fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                TextButton(onClick = onRefresh) { Text("Обновить") }
+            }
+        }
+        items(cards, key = { it }) { cat ->
+            val contents = matchingShots(shots, cat)
+            Card(onClick = { onSelect(cat) }, modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                Box(Modifier.fillMaxWidth().height(104.dp)) {
+                    if (contents.isNotEmpty()) {
+                        AsyncImage(model = contents.first().uri, contentDescription = null,
+                            contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    } else {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(categoryEmoji(cat), fontSize = 41.sp)
                         }
                     }
-                    Column(Modifier.padding(12.dp)) {
-                        Text(cat, fontWeight = FontWeight.SemiBold, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis)
-                        Spacer(Modifier.height(3.dp))
-                        Text("${contents.size} · ${formatSize(contents.sumOf { it.size })}",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp)
-                    }
+                }
+                Column(Modifier.padding(12.dp)) {
+                    Text(cat, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.height(3.dp))
+                    Text("${contents.size} · ${formatSize(contents.sumOf { it.size })}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
             }
         }
@@ -525,10 +570,20 @@ private fun ReviewScreen(shots: List<Shot>, chosenCategory: String,
         if (current == null) {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("🎉", fontSize = 65.sp)
-                Text("Здесь всё разобрано", fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                Text("Отложенные изображения можно вернуть через категории.",
-                    textAlign = TextAlign.Center, fontSize = 14.sp)
+                Text(if (chosenCategory == "Все") "🎉" else "📂", fontSize = 65.sp)
+                Text(if (chosenCategory == "Все") "Пока нет новых для разбора"
+                     else "В категории «$chosenCategory» нет новых скриншотов",
+                     fontSize = 19.sp, fontWeight = FontWeight.Bold,
+                     textAlign = TextAlign.Center)
+                if (chosenCategory != "Все") {
+                    Spacer(Modifier.height(12.dp))
+                    Button(onClick = { onChooseCategory("Все") }) {
+                        Text("Показать все скриншоты (${shots.count { it.decision == Decision.NEW }})")
+                    }
+                } else {
+                    Text("Оставленные и отложенные фотографии доступны через категории.",
+                        textAlign = TextAlign.Center, fontSize = 14.sp)
+                }
             }
         } else {
             val count = candidates.count { it.decision == Decision.NEW }

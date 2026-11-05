@@ -12,6 +12,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.getValue
@@ -81,6 +85,13 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var scanReport by mutableStateOf<ScanReport?>(null)
         private set
+    var isClassifying by mutableStateOf(false)
+        private set
+    var ocrProcessed by mutableStateOf(0)
+        private set
+    var classificationStatus by mutableStateOf<String?>(null)
+        private set
+    private var classifyJob: Job? = null
 
     fun refresh() {
         val context = getApplication<Application>()
@@ -96,6 +107,7 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val result = withContext(Dispatchers.IO) { readScreenshots(context) }
                 shots = result.shots
+                ocrProcessed = result.shots.count { preferences.getBoolean("ocr_done:${it.uri}", false) }
                 scanReport = result.report
                 message = when {
                     result.report.queryReturnedNull -> "Android не вернул список изображений (MediaStore query = null)."
@@ -168,6 +180,74 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         return ScanResult(result, ScanReport(visibleImages, result.size, sampleNames))
+    }
+
+    /** Runs only on explicit user request, in batches so 5,000 images do not lock up the phone. */
+    fun classifyNextBatch(batchSize: Int = 40) {
+        if (classifyJob?.isActive == true || isClassifying) return
+        val context = getApplication<Application>()
+        val candidates = shots.filter {
+            it.category == "Без категории" &&
+                !preferences.getBoolean("ocr_done:${it.uri}", false) &&
+                it.decision != Decision.PENDING_DELETE
+        }.take(batchSize)
+        if (candidates.isEmpty()) {
+            classificationStatus = "Не осталось нераспознанных изображений в категории «Без категории»."
+            return
+        }
+        classifyJob = viewModelScope.launch {
+            isClassifying = true
+            classificationStatus = "Подготовка русской и английской модели…"
+            try {
+                withContext(Dispatchers.IO) {
+                    OfflineClassifier(context).use { classifier ->
+                        candidates.forEachIndexed { index, shot ->
+                            coroutineContext.ensureActive()
+                            var category: String? = null
+                            var issue: String? = null
+                            try {
+                                category = classifier.categoryOf(shot)
+                            } catch (e: Exception) {
+                                issue = "Не удалось распознать один файл: ${e.javaClass.simpleName}"
+                            }
+                            val mayAssign = preferences.getString("category:${shot.uri}", "Без категории") == "Без категории"
+                            val proposedCategory = category
+                            preferences.edit().apply {
+                                putBoolean("ocr_done:${shot.uri}", true)
+                                if (proposedCategory != null && mayAssign) {
+                                    putString("category:${shot.uri}", proposedCategory)
+                                }
+                                apply()
+                            }
+                            withContext(Dispatchers.Main) {
+                                val resolved = category
+                                if (resolved != null) {
+                                    shots = shots.map { item ->
+                                        if (item.uri == shot.uri && item.category == "Без категории")
+                                            item.copy(category = resolved)
+                                        else item
+                                    }
+                                }
+                                ocrProcessed++
+                                classificationStatus = issue ?: "Распознано ${index + 1} из ${candidates.size} в этой порции"
+                            }
+                        }
+                    }
+                }
+                classificationStatus = "Готово: обработано ${candidates.size} изображений. " +
+                    "Можно запустить следующую порцию."
+            } catch (cancel: CancellationException) {
+                classificationStatus = "Сортировка остановлена. Уже обработанные результаты сохранены."
+            } catch (e: Exception) {
+                classificationStatus = "Ошибка OCR: ${e.javaClass.simpleName}: ${e.localizedMessage ?: "нет описания"}"
+            } finally {
+                isClassifying = false
+            }
+        }
+    }
+
+    fun stopClassifying() {
+        classifyJob?.cancel()
     }
 
     fun decide(shot: Shot, decision: Decision) {
