@@ -1,0 +1,1 @@
+SwipeSort 0.1.1: Fix photo permissions screen not updating after Android grants access; recheck permission on returning from Settings. Does not change or delete media files.

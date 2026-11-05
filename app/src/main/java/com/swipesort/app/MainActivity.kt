@@ -45,9 +45,34 @@ import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     private val model: ShotViewModel by viewModels()
+
+    // 0 = no photo access, 1 = selected photos, 2 = all photos.
+    // Compose observes this state and redraws the permissions screen immediately.
+    private var photoAccessLevel by mutableIntStateOf(0)
+
+    private fun refreshPhotoAccess() {
+        photoAccessLevel = when {
+            hasFullPhotoAccess(this) -> 2
+            hasPhotoAccess(this) -> 1
+            else -> 0
+        }
+        if (photoAccessLevel != 0) model.refresh()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { SwipeSortApp(model) }
+        photoAccessLevel = when {
+            hasFullPhotoAccess(this) -> 2
+            hasPhotoAccess(this) -> 1
+            else -> 0
+        }
+        setContent { SwipeSortApp(model, photoAccessLevel, ::refreshPhotoAccess) }
+    }
+
+    // Android permissions can change in Settings while the app is in the background.
+    override fun onResume() {
+        super.onResume()
+        refreshPhotoAccess()
     }
 }
 
@@ -55,7 +80,11 @@ private val accent = Color(0xFF6750C8)
 private val panelLight = Color(0xFFF5F3FC)
 
 @Composable
-private fun SwipeSortApp(model: ShotViewModel) {
+private fun SwipeSortApp(
+    model: ShotViewModel,
+    photoAccessLevel: Int,
+    onPhotoPermissionResult: () -> Unit
+) {
     val context = LocalContext.current
     val dark = isSystemInDarkTheme()
     val colors = if (dark) darkColorScheme(primary = Color(0xFFC7B7FF))
@@ -72,7 +101,7 @@ private fun SwipeSortApp(model: ShotViewModel) {
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { model.refresh() }
+    ) { onPhotoPermissionResult() }
 
     val trashLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
@@ -85,8 +114,6 @@ private fun SwipeSortApp(model: ShotViewModel) {
         }
         pendingConfirmation = emptyList()
     }
-
-    LaunchedEffect(Unit) { model.refresh() }
 
     MaterialTheme(colorScheme = colors) {
         Scaffold(
@@ -123,12 +150,12 @@ private fun SwipeSortApp(model: ShotViewModel) {
             }
         ) { insets ->
             Column(Modifier.fillMaxSize().padding(insets)) {
-                if (!hasPhotoAccess(context)) {
+                if (photoAccessLevel == 0) {
                     PermissionContent(onRequest = {
                         permissionLauncher.launch(requestedPermissions())
                     })
                 } else {
-                    if (!hasFullPhotoAccess(context)) {
+                    if (photoAccessLevel == 1) {
                         Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(10.dp),
