@@ -12,8 +12,8 @@ android {
         applicationId = "com.swipesort.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
     }
 
     buildFeatures { compose = true }
@@ -34,5 +34,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.9.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0")
+    // Bundled model: available offline, does not download images or model at runtime.
+    implementation("com.google.mlkit:image-labeling:17.0.9")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

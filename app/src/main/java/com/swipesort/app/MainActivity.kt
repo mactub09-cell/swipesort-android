@@ -137,7 +137,7 @@ private fun SwipeSortApp(
                     ) {
                         Column {
                             Text("SwipeSort", fontSize = 26.sp, fontWeight = FontWeight.Black)
-                            Text("Порядок в скриншотах · v0.3.0", fontSize = 12.sp,
+                            Text("Порядок в скриншотах · v0.4.0", fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Text("✦", fontSize = 28.sp, color = MaterialTheme.colorScheme.primary)
@@ -203,6 +203,11 @@ private fun SwipeSortApp(
                                 classificationActive = model.isClassifying,
                                 classificationCompleted = model.ocrProcessed,
                                 classificationTotal = model.shots.size,
+                                classificationRemaining = model.shots.count {
+                                    it.category == "Без категории" && it.decision != Decision.PENDING_DELETE &&
+                                        !context.getSharedPreferences("shot_decisions", Context.MODE_PRIVATE)
+                                            .getBoolean("v04_done:${it.uri}", false)
+                                },
                                 classificationStatus = model.classificationStatus
                             )
                         } else {
@@ -340,7 +345,7 @@ private fun DiagnosticPanel(
         ) == PackageManager.PERMISSION_GRANTED
         AlertDialog(
             onDismissRequest = onExpand,
-            title = { Text("Диагностика · v0.3.0") },
+            title = { Text("Диагностика · v0.4.0") },
             text = {
                 Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                     Text("Android API ${Build.VERSION.SDK_INT}")
@@ -396,6 +401,7 @@ private fun CategoryHome(
     classificationActive: Boolean,
     classificationCompleted: Int,
     classificationTotal: Int,
+    classificationRemaining: Int,
     classificationStatus: String?
 ) {
     val kept = shots.count { it.decision == Decision.KEEP }
@@ -435,22 +441,23 @@ private fun CategoryHome(
             Surface(shape = RoundedCornerShape(18.dp),
                 color = MaterialTheme.colorScheme.secondaryContainer) {
                 Column(Modifier.padding(14.dp)) {
-                    Text("Автосортировка по содержимому", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Text("Локальное распознавание русского и английского текста. " +
-                        "Неопределённое остаётся без категории.", fontSize = 12.sp)
+                    Text("Умная сортировка", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text("Сначала русский и английский текст, затем визуальные объекты. " +
+                        "Всё на телефоне, без отправки скриншотов в интернет. " +
+                        "Неуверенные результаты останутся в «Без категории».", fontSize = 12.sp)
                     Spacer(Modifier.height(5.dp))
-                    Text("Проверено: $classificationCompleted из $classificationTotal", fontSize = 12.sp)
+                    Text("Проанализировано $classificationCompleted из $classificationTotal · осталось $classificationRemaining", fontSize = 12.sp)
                     classificationStatus?.let { Text(it, fontSize = 12.sp) }
                     Spacer(Modifier.height(8.dp))
                     if (classificationActive) {
                         LinearProgressIndicator(Modifier.fillMaxWidth())
                         TextButton(onClick = onStopAutoSort) { Text("Остановить") }
                     } else {
-                        Button(onClick = onAutoSort, enabled = classificationCompleted < classificationTotal,
-                            modifier = Modifier.fillMaxWidth()) { Text("Проверить следующие 40") }
+                        Button(onClick = onAutoSort, enabled = classificationRemaining > 0,
+                            modifier = Modifier.fillMaxWidth()) { Text("Пробная сортировка · 40 скриншотов") }
                         OutlinedButton(onClick = onAutoSortAll,
-                            enabled = classificationCompleted < classificationTotal,
-                            modifier = Modifier.fillMaxWidth()) { Text("Сортировать все оставшиеся") }
+                            enabled = classificationRemaining > 0,
+                            modifier = Modifier.fillMaxWidth()) { Text("Сортировать всё оставшееся") }
                         Text("При большой галерее это длительная операция. " +
                             "Держи приложение открытым; результаты сохраняются по мере обработки.", fontSize = 11.sp)
                     }
@@ -766,6 +773,9 @@ private fun categoryEmoji(cat: String): String = when (cat) {
     "Здоровье" -> "💊"
     "Документы" -> "📄"
     "Дети и игры" -> "🧸"
+    "Животные" -> "🐈"
+    "Еда и напитки" -> "🍰"
+    "Природа" -> "🌿"
     "Путешествия" -> "✈️"
     "Дом" -> "🏠"
     else -> "📷"

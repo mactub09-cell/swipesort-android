@@ -2,12 +2,9 @@ package com.swipesort.app
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.net.Uri
 import com.googlecode.tesseract.android.TessBaseAPI
 import java.io.File
 import java.io.FileOutputStream
-import kotlin.math.max
 
 /** On-device text recognition. Never uploads screenshots or text. Call only on an IO dispatcher. */
 internal class OfflineClassifier(private val context: Context) : AutoCloseable {
@@ -38,31 +35,14 @@ internal class OfflineClassifier(private val context: Context) : AutoCloseable {
         }
     }
 
-    /** Returns null when there is no convincing match, instead of inventing a category. */
-    fun categoryOf(shot: Shot): String? {
-        val bitmap = loadPreview(shot.uri) ?: return null
-        return try {
+    /** Reuses the bitmap already decoded by HybridClassifier. */
+    fun categoryOfBitmap(bitmap: Bitmap): String? {
+        try {
             tess.setImage(bitmap)
-            val recognized = tess.getUTF8Text().orEmpty()
-            detectCategory(recognized)
+            return detectCategory(tess.getUTF8Text().orEmpty())
         } finally {
             tess.clear()
-            bitmap.recycle()
         }
-    }
-
-    private fun loadPreview(uri: Uri): Bitmap? {
-        val resolver = context.contentResolver
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        var sample = 1
-        while (max(bounds.outWidth, bounds.outHeight) / sample > 1800) sample *= 2
-        val options = BitmapFactory.Options().apply {
-            inSampleSize = sample
-            inPreferredConfig = Bitmap.Config.ARGB_8888
-        }
-        return resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
     }
 
     override fun close() {
