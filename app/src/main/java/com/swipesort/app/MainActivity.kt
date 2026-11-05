@@ -1,6 +1,14 @@
 package com.swipesort.app
 
 import android.app.Activity
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.core.content.ContextCompat
 import android.os.Bundle
 import android.provider.MediaStore
 import android.widget.Toast
@@ -98,6 +106,7 @@ private fun SwipeSortApp(
     var bulkCategory by remember { mutableStateOf<String?>(null) }
     var showTrashConfirmation by remember { mutableStateOf(false) }
     var pendingConfirmation by remember { mutableStateOf<List<Shot>>(emptyList()) }
+    var diagnosticsExpanded by rememberSaveable { mutableStateOf(true) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -127,7 +136,7 @@ private fun SwipeSortApp(
                     ) {
                         Column {
                             Text("SwipeSort", fontSize = 26.sp, fontWeight = FontWeight.Black)
-                            Text("Порядок в скриншотах", fontSize = 12.sp,
+                            Text("Порядок в скриншотах · v0.2.0", fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Text("✦", fontSize = 28.sp, color = MaterialTheme.colorScheme.primary)
@@ -150,6 +159,15 @@ private fun SwipeSortApp(
             }
         ) { insets ->
             Column(Modifier.fillMaxSize().padding(insets)) {
+                DiagnosticPanel(
+                    context = context,
+                    accessLevel = photoAccessLevel,
+                    report = model.scanReport,
+                    message = model.message,
+                    expanded = diagnosticsExpanded,
+                    onExpand = { diagnosticsExpanded = !diagnosticsExpanded },
+                    onRecheck = onPhotoPermissionResult
+                )
                 if (photoAccessLevel == 0) {
                     PermissionContent(onRequest = {
                         permissionLauncher.launch(requestedPermissions())
@@ -273,6 +291,63 @@ private fun SwipeSortApp(
                     TextButton(onClick = { showTrashConfirmation = false }) { Text("Отмена") }
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun DiagnosticPanel(
+    context: Context,
+    accessLevel: Int,
+    report: ScanReport?,
+    message: String?,
+    expanded: Boolean,
+    onExpand: () -> Unit,
+    onRecheck: () -> Unit
+) {
+    val imgGrant = ContextCompat.checkSelfPermission(
+        context, Manifest.permission.READ_MEDIA_IMAGES
+    ) == PackageManager.PERMISSION_GRANTED
+    val selectedGrant = Build.VERSION.SDK_INT >= 34 && ContextCompat.checkSelfPermission(
+        context, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+    ) == PackageManager.PERMISSION_GRANTED
+    val storageGrant = Build.VERSION.SDK_INT < 33 && ContextCompat.checkSelfPermission(
+        context, Manifest.permission.READ_EXTERNAL_STORAGE
+    ) == PackageManager.PERMISSION_GRANTED
+    val accessText = when (accessLevel) {
+        2 -> "полный"
+        1 -> "выбранные фото"
+        else -> "нет доступа"
+    }
+    Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)) {
+            TextButton(onClick = onExpand) {
+                Text("Диагностика v0.2.0 · $accessText ${if (expanded) "▲" else "▼"}")
+            }
+            if (expanded) {
+                Text(
+                    "Android API ${Build.VERSION.SDK_INT} · READ_MEDIA_IMAGES: $imgGrant · " +
+                        "VISUAL_USER_SELECTED: $selectedGrant · READ_EXTERNAL_STORAGE: $storageGrant",
+                    fontSize = 11.sp
+                )
+                Text(
+                    "MediaStore: ${report?.visibleImages ?: "—"} изображений; " +
+                        "скриншотов: ${report?.screenshotCandidates ?: "—"}",
+                    fontSize = 12.sp
+                )
+                report?.sampleFileNames?.takeIf { it.isNotEmpty() }?.let { names ->
+                    Text("Примеры имён: ${names.joinToString("; ")}", fontSize = 11.sp)
+                }
+                message?.let { Text("Статус: $it", fontSize = 12.sp) }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    TextButton(onClick = onRecheck) { Text("Проверить снова") }
+                    TextButton(onClick = {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:${context.packageName}"))
+                        context.startActivity(intent)
+                    }) { Text("Разрешения Android") }
+                }
+            }
         }
     }
 }

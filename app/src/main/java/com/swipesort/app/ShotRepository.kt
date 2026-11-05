@@ -20,6 +20,15 @@ import androidx.compose.runtime.setValue
 
 internal enum class Decision { NEW, KEEP, SKIPPED, PENDING_DELETE }
 
+internal data class ScanReport(
+    val visibleImages: Int,
+    val screenshotCandidates: Int,
+    val sampleFileNames: List<String>,
+    val queryReturnedNull: Boolean = false
+)
+
+internal data class ScanResult(val shots: List<Shot>, val report: ScanReport)
+
 internal data class Shot(
     val id: Long,
     val uri: Uri,
@@ -70,27 +79,41 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var message by mutableStateOf<String?>(null)
         private set
+    var scanReport by mutableStateOf<ScanReport?>(null)
+        private set
 
     fun refresh() {
         val context = getApplication<Application>()
         if (!hasPhotoAccess(context)) {
             shots = emptyList()
+            scanReport = null
+            message = "Android пока не выдал приложению доступ к изображениям."
             return
         }
         viewModelScope.launch {
             isLoading = true
+            message = null
             try {
-                shots = withContext(Dispatchers.IO) { readScreenshots(context) }
-                message = null
+                val result = withContext(Dispatchers.IO) { readScreenshots(context) }
+                shots = result.shots
+                scanReport = result.report
+                message = when {
+                    result.report.queryReturnedNull -> "Android не вернул список изображений (MediaStore query = null)."
+                    result.shots.isEmpty() && result.report.visibleImages > 0 ->
+                        "Изображения доступны, но ни один файл не распознан как скриншот по имени или папке. Это ограничение текущего поиска."
+                    result.shots.isEmpty() -> "Android не вернул доступных изображений. Проверь, что разрешён доступ ко всем фото."
+                    else -> null
+                }
             } catch (e: Exception) {
-                message = "Не получилось прочитать галерею: ${e.localizedMessage ?: "ошибка"}"
+                scanReport = null
+                message = "Ошибка при чтении галереи: ${e.javaClass.simpleName}: ${e.localizedMessage ?: "нет описания"}"
             } finally {
                 isLoading = false
             }
         }
     }
 
-    private fun readScreenshots(context: Context): List<Shot> {
+    private fun readScreenshots(context: Context): ScanResult {
         val resolver = context.contentResolver
         val baseUri = if (Build.VERSION.SDK_INT >= 29)
             MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
@@ -104,8 +127,12 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
             MediaStore.Images.Media.DATE_ADDED
         )
         val result = mutableListOf<Shot>()
-        resolver.query(baseUri, projection, null, null,
-            "${MediaStore.Images.Media.DATE_ADDED} DESC")?.use { cursor ->
+        var visibleImages = 0
+        val sampleNames = mutableListOf<String>()
+        val cursor = resolver.query(baseUri, projection, null, null,
+            "${MediaStore.Images.Media.DATE_ADDED} DESC")
+            ?: return ScanResult(emptyList(), ScanReport(0, 0, emptyList(), queryReturnedNull = true))
+        cursor.use { cursor ->
             val idIdx = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
             val nameIdx = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
             val pathIdx = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.RELATIVE_PATH)
@@ -115,6 +142,8 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idIdx)
                 val name = cursor.getString(nameIdx).orEmpty()
+                visibleImages++
+                if (sampleNames.size < 5) sampleNames += name.take(55)
                 val path = cursor.getString(pathIdx).orEmpty()
                 val bucket = cursor.getString(bucketIdx).orEmpty()
                 val searchable = "$name $path $bucket".lowercase()
@@ -138,7 +167,7 @@ internal class ShotViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
         }
-        return result
+        return ScanResult(result, ScanReport(visibleImages, result.size, sampleNames))
     }
 
     fun decide(shot: Shot, decision: Decision) {
