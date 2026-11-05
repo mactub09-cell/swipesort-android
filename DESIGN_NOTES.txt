@@ -1,0 +1,30 @@
+SÖRT 0.6 — Android UI / brand patch
+
+WHAT CHANGED
+- Green/ivory/burgundy/gold design based on the user's visual reference.
+- Four real tabs: Главная / Разбор / Категории / Корзина.
+- Home dashboard and intelligent sorting controls; category card grid.
+- Refreshed swipe screen with branded decision buttons; original swipe gestures intact.
+- Diagnostics moved into toolbar button instead of occupying the screen.
+- SÖRT display name and custom tulip/folder adaptive launcher icon.
+- Empty trash state.
+
+WHAT DID NOT CHANGE
+- ShotRepository.kt, OfflineClassifier.kt, SmartCategoryRules.kt and any classification/storage code.
+- Decisions / queue / MediaStore deletion code.
+- Android permissions and no-INTERNET configuration.
+- Gradle applicationId, build signing configuration and GitHub workflow.
+- Photo data and Gallery files.
+
+INSTALL
+1. Upload ZIP into EXISTING Codespaces repo and run:
+   unzip -o SORT-Design-Patch.zip -d . && rm SORT-Design-Patch.zip && bash apply_sort_design.sh && git add app && git commit -m "Redesign SwipeSort as SORT" && git push
+2. Build from GitHub Actions, use the latest successful APK artifact.
+3. Verify the APK installed as an UPDATE of the same existing beta/preview app.
+
+NOTE
+- If there is another MainActivity.kt already modified in GitHub after v0.5, manually review its diff before overwriting it.
+- The provided patch was authored against SwipeSort v0.5.0 source in this conversation.
+- Kotlin/Android Gradle build has NOT been run here. Compile and test in GitHub Actions before installing.
+- The app's new branding is SÖRT, although its internal Java package remains com.swipesort.app.
+- For production publication, check SÖRT naming/brand rights.

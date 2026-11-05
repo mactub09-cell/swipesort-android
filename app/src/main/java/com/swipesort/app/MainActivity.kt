@@ -20,10 +20,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -39,9 +41,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,8 +89,33 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private val accent = Color(0xFF6750C8)
-private val panelLight = Color(0xFFF5F3FC)
+// SÖRT brand tokens: warm ivory, emerald, tulip red and restrained gold.
+private val sortGreen = Color(0xFF07543C)
+private val sortDeep = Color(0xFF163529)
+private val sortIvory = Color(0xFFF9F3E9)
+private val sortCream = Color(0xFFFFFBF5)
+private val sortGold = Color(0xFFC59B4B)
+private val sortRed = Color(0xFFBD3428)
+private val sortMuted = Color(0xFF786F65)
+private val sortLine = Color(0xFFE8DECF)
+private val sortScheme = lightColorScheme(
+    primary = sortGreen,
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFE0EEE4),
+    onPrimaryContainer = sortDeep,
+    secondary = sortGold,
+    onSecondary = sortDeep,
+    secondaryContainer = Color(0xFFF4EAD8),
+    onSecondaryContainer = sortDeep,
+    background = sortIvory,
+    onBackground = sortDeep,
+    surface = sortCream,
+    onSurface = sortDeep,
+    surfaceVariant = Color(0xFFF0E8DB),
+    onSurfaceVariant = sortMuted,
+    error = sortRed
+)
+
 
 @Composable
 private fun SwipeSortApp(
@@ -95,9 +124,6 @@ private fun SwipeSortApp(
     onPhotoPermissionResult: () -> Unit
 ) {
     val context = LocalContext.current
-    val dark = isSystemInDarkTheme()
-    val colors = if (dark) darkColorScheme(primary = Color(0xFFC7B7FF))
-        else lightColorScheme(primary = accent, background = Color(0xFFFDFBFF), surface = Color.White)
 
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var openedCategory by rememberSaveable { mutableStateOf<String?>(null) }
@@ -125,35 +151,65 @@ private fun SwipeSortApp(
         pendingConfirmation = emptyList()
     }
 
-    MaterialTheme(colorScheme = colors) {
+    MaterialTheme(colorScheme = sortScheme) {
         Scaffold(
+            containerColor = sortIvory,
             topBar = {
-                Surface(shadowElevation = 1.dp, color = MaterialTheme.colorScheme.surface) {
+                Surface(color = sortCream, shadowElevation = 1.dp) {
                     Row(
                         modifier = Modifier.fillMaxWidth().statusBarsPadding()
-                            .padding(horizontal = 20.dp, vertical = 13.dp),
+                            .padding(horizontal = 18.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column {
-                            Text("SwipeSort", fontSize = 26.sp, fontWeight = FontWeight.Black)
-                            Text("Порядок в скриншотах · v0.5.0", fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Image(painter = painterResource(R.drawable.sort_mark),
+                                contentDescription = "Эмблема SÖRT",
+                                modifier = Modifier.size(44.dp))
+                            Column {
+                                Text("SÖRT", fontSize = 28.sp, fontWeight = FontWeight.Black,
+                                    color = sortGreen, letterSpacing = 1.sp)
+                                Text("ПОРЯДОК В СКРИНШОТАХ", fontSize = 9.sp,
+                                    color = sortDeep, letterSpacing = 1.sp)
+                            }
                         }
-                        Text("✦", fontSize = 28.sp, color = MaterialTheme.colorScheme.primary)
+                        IconButton(onClick = { diagnosticsExpanded = true },
+                            modifier = Modifier.size(44.dp)) {
+                            Icon(painterResource(R.drawable.sort_settings),
+                                contentDescription = "Диагностика и настройки", tint = sortGreen)
+                        }
                     }
                 }
             },
             bottomBar = {
-                NavigationBar {
-                    val menu = listOf(Triple("🗂️", "Категории", 0),
-                        Triple("↔️", "Разбор", 1), Triple("🗑️", "Корзина", 2))
-                    menu.forEach { (symbol, label, index) ->
+                NavigationBar(containerColor = sortCream, tonalElevation = 2.dp) {
+                    val menu = listOf(
+                        Triple(R.drawable.sort_home, "Главная", 0),
+                        Triple(R.drawable.sort_layers, "Разбор", 1),
+                        Triple(R.drawable.sort_folder, "Категории", 2),
+                        Triple(R.drawable.sort_trash, "Корзина", 3)
+                    )
+                    menu.forEach { (drawable, label, index) ->
                         NavigationBarItem(
                             selected = tab == index,
-                            onClick = { tab = index; openedCategory = null; if (index == 1) reviewCategory = "Все" },
-                            icon = { Text(symbol, fontSize = 22.sp) },
-                            label = { Text(label) }
+                            onClick = {
+                                tab = index
+                                openedCategory = null
+                                if (index == 1) reviewCategory = "Все"
+                            },
+                            icon = {
+                                Icon(painterResource(drawable), contentDescription = null,
+                                    modifier = Modifier.size(23.dp))
+                            },
+                            label = { Text(label, fontSize = 10.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = sortGreen,
+                                selectedTextColor = sortGreen,
+                                indicatorColor = Color(0xFFE5E9D8),
+                                unselectedIconColor = sortMuted,
+                                unselectedTextColor = sortMuted
+                            )
                         )
                     }
                 }
@@ -192,25 +248,36 @@ private fun SwipeSortApp(
                         Text(it, modifier = Modifier.padding(12.dp), color = MaterialTheme.colorScheme.error)
                     }
                     when (tab) {
-                        0 -> if (openedCategory == null) {
+                        0 -> SortHomeScreen(
+                            shots = model.shots,
+                            onReview = { reviewCategory = "Все"; tab = 1 },
+                            onCategories = { tab = 2 },
+                            onAutoSort = { model.classifyNextBatch(40) },
+                            onAutoSortAll = { model.classifyNextBatch(model.shots.size) },
+                            onStopAutoSort = { model.stopClassifying() },
+                            classificationActive = model.isClassifying,
+                            classificationCompleted = model.ocrProcessed,
+                            classificationRemaining = model.shots.count {
+                                it.category == "Без категории" && it.decision != Decision.PENDING_DELETE &&
+                                    !context.getSharedPreferences("shot_decisions", Context.MODE_PRIVATE)
+                                        .getBoolean("v05_done:${it.uri}", false) &&
+                                    !context.getSharedPreferences("shot_decisions", Context.MODE_PRIVATE)
+                                        .getBoolean("manual_category:${it.uri}", false)
+                            },
+                            classificationStatus = model.classificationStatus
+                        )
+                        1 -> ReviewScreen(
+                            shots = model.shots,
+                            chosenCategory = reviewCategory,
+                            onChooseCategory = { reviewCategory = it },
+                            onDecision = { shot, decision -> model.decide(shot, decision) },
+                            onAssign = { pickCategoryFor = it }
+                        )
+                        2 -> if (openedCategory == null) {
                             CategoryHome(model.shots,
                                 onSelect = { openedCategory = it },
                                 onReview = { reviewCategory = "Все"; tab = 1 },
-                                onRefresh = { model.refresh() },
-                                onAutoSort = { model.classifyNextBatch(40) },
-                                onAutoSortAll = { model.classifyNextBatch(model.shots.size) },
-                                onStopAutoSort = { model.stopClassifying() },
-                                classificationActive = model.isClassifying,
-                                classificationCompleted = model.ocrProcessed,
-                                classificationTotal = model.shots.size,
-                                classificationRemaining = model.shots.count {
-                                    it.category == "Без категории" && it.decision != Decision.PENDING_DELETE &&
-                                        !context.getSharedPreferences("shot_decisions", Context.MODE_PRIVATE)
-                                            .getBoolean("v05_done:${it.uri}", false) &&
-                                        !context.getSharedPreferences("shot_decisions", Context.MODE_PRIVATE)
-                                            .getBoolean("manual_category:${it.uri}", false)
-                                },
-                                classificationStatus = model.classificationStatus
+                                onRefresh = { model.refresh() }
                             )
                         } else {
                             CategoryDetail(
@@ -222,13 +289,6 @@ private fun SwipeSortApp(
                                 onBulk = { bulkCategory = openedCategory }
                             )
                         }
-                        1 -> ReviewScreen(
-                            shots = model.shots,
-                            chosenCategory = reviewCategory,
-                            onChooseCategory = { reviewCategory = it },
-                            onDecision = { shot, decision -> model.decide(shot, decision) },
-                            onAssign = { pickCategoryFor = it }
-                        )
                         else -> QueueScreen(
                             shots = model.shots.filter { it.decision == Decision.PENDING_DELETE },
                             onRestore = { model.decide(it, Decision.NEW) },
@@ -320,24 +380,6 @@ private fun DiagnosticPanel(
     onExpand: () -> Unit,
     onRecheck: () -> Unit
 ) {
-    val accessText = when (accessLevel) {
-        2 -> "полный доступ"
-        1 -> "выбранные фото"
-        else -> "нет доступа"
-    }
-    // Never put the multiline diagnostic dump inside the main screen's Column.
-    // Even with 5,000 loaded screenshots it must not consume the swiping viewport.
-    Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-        Row(Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("📷 ${report?.screenshotCandidates ?: "—"} скриншотов · $accessText",
-                modifier = Modifier.weight(1f), maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.labelMedium)
-            TextButton(onClick = onExpand) { Text("Диагностика ⚙", fontSize = 12.sp) }
-        }
-    }
     if (expanded) {
         val imgGrant = ContextCompat.checkSelfPermission(
             context, Manifest.permission.READ_MEDIA_IMAGES
@@ -347,7 +389,7 @@ private fun DiagnosticPanel(
         ) == PackageManager.PERMISSION_GRANTED
         AlertDialog(
             onDismissRequest = onExpand,
-            title = { Text("Диагностика · v0.4.0") },
+            title = { Text("Диагностика SÖRT") },
             text = {
                 Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                     Text("Android API ${Build.VERSION.SDK_INT}")
@@ -379,7 +421,8 @@ private fun PermissionContent(onRequest: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("🖼️", fontSize = 72.sp)
+        Image(painterResource(R.drawable.sort_mark), contentDescription = null,
+            modifier = Modifier.size(90.dp))
         Spacer(Modifier.height(24.dp))
         Text("Разберём скриншоты?", fontSize = 25.sp, fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center)
@@ -392,117 +435,211 @@ private fun PermissionContent(onRequest: () -> Unit) {
 }
 
 @Composable
-private fun CategoryHome(
+private fun SortHomeScreen(
     shots: List<Shot>,
-    onSelect: (String) -> Unit,
     onReview: () -> Unit,
-    onRefresh: () -> Unit,
+    onCategories: () -> Unit,
     onAutoSort: () -> Unit,
     onAutoSortAll: () -> Unit,
     onStopAutoSort: () -> Unit,
     classificationActive: Boolean,
     classificationCompleted: Int,
-    classificationTotal: Int,
     classificationRemaining: Int,
     classificationStatus: String?
 ) {
     val kept = shots.count { it.decision == Decision.KEEP }
     val queued = shots.count { it.decision == Decision.PENDING_DELETE }
     val finished = shots.count { it.decision != Decision.NEW }
-    val cards = listOf("Все", "Без категории") + groups.drop(1)
+    val filled = shots.count { it.category != "Без категории" }
+    val progress = if (shots.isEmpty()) 0f else finished.toFloat() / shots.size
 
-    // One scrollable grid. A separate, non-scrolling header could leave zero space for images.
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(15.dp)
+    ) {
+        Surface(shape = RoundedCornerShape(28.dp), color = sortCream,
+            shadowElevation = 3.dp, border = androidx.compose.foundation.BorderStroke(1.dp, sortLine)) {
+            Column(
+                Modifier.fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(Color(0xFFFFFCF6), Color(0xFFF4E9D7))))
+                    .padding(22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Image(painterResource(R.drawable.sort_mark), contentDescription = null,
+                    modifier = Modifier.size(72.dp))
+                Spacer(Modifier.height(6.dp))
+                Text("Давай наведём порядок\nв скриншотах?", color = sortDeep,
+                    fontSize = 25.sp, fontWeight = FontWeight.Bold,
+                    lineHeight = 29.sp, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(8.dp))
+                Text("✦  ✦  ✦", fontSize = 15.sp, color = sortGold)
+                Spacer(Modifier.height(14.dp))
+                Button(
+                    onClick = onReview,
+                    enabled = shots.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Icon(painterResource(R.drawable.sort_layers), contentDescription = null,
+                        modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text("Начать уборку", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(8.dp))
+                    Text("→", fontSize = 22.sp)
+                }
+                Spacer(Modifier.height(14.dp))
+                Surface(color = Color.White, shape = RoundedCornerShape(17.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, sortLine)) {
+                    Row(Modifier.fillMaxWidth().padding(13.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Column {
+                            Text("${shots.size} скриншотов", fontWeight = FontWeight.Bold,
+                                color = sortDeep, fontSize = 16.sp)
+                            Text(formatSize(shots.sumOf { it.size }), color = sortMuted, fontSize = 12.sp)
+                        }
+                        Icon(painterResource(R.drawable.sort_folder), contentDescription = null,
+                            tint = sortGreen)
+                    }
+                }
+            }
+        }
+
+        Surface(shape = RoundedCornerShape(22.dp), color = Color.White,
+            border = androidx.compose.foundation.BorderStroke(1.dp, sortLine)) {
+            Column(Modifier.padding(18.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Прогресс уборки", fontWeight = FontWeight.Bold, color = sortDeep)
+                    Text("$finished / ${shots.size}", color = sortMuted, fontSize = 12.sp)
+                }
+                Spacer(Modifier.height(10.dp))
+                LinearProgressIndicator(progress = { progress },
+                    modifier = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(99.dp)),
+                    color = sortGreen, trackColor = sortLine)
+                Spacer(Modifier.height(12.dp))
+                Text("Оставлено $kept  ·  В очереди удаления $queued", color = sortMuted, fontSize = 12.sp)
+            }
+        }
+
+        Surface(shape = RoundedCornerShape(22.dp), color = Color.White,
+            border = androidx.compose.foundation.BorderStroke(1.dp, sortLine)) {
+            Column(Modifier.padding(18.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("✦", color = sortGold, fontSize = 24.sp)
+                    Text("Умная сортировка", color = sortDeep,
+                        fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                }
+                Text("Распознаёт текст и объекты локально. Фотографии не отправляются в интернет.",
+                    color = sortMuted, fontSize = 13.sp, lineHeight = 18.sp)
+                Spacer(Modifier.height(12.dp))
+                Text("По темам: $filled  ·  Проверено: $classificationCompleted",
+                    color = sortDeep, fontSize = 13.sp)
+                Text("Ожидают обработки: $classificationRemaining", color = sortMuted, fontSize = 12.sp)
+                classificationStatus?.let {
+                    Spacer(Modifier.height(5.dp))
+                    Text(it, color = sortMuted, fontSize = 12.sp)
+                }
+                Spacer(Modifier.height(12.dp))
+                if (classificationActive) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth(), color = sortGreen)
+                    TextButton(onClick = onStopAutoSort) { Text("Остановить") }
+                } else {
+                    Button(onClick = onAutoSort, enabled = classificationRemaining > 0,
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(50)) {
+                        Text("Проверить 40 скриншотов")
+                    }
+                    OutlinedButton(onClick = onAutoSortAll, enabled = classificationRemaining > 0,
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(50)) {
+                        Text("Сортировать все оставшиеся")
+                    }
+                    Text("Большие партии требуют времени. Результаты сохраняются постепенно.",
+                        color = sortMuted, fontSize = 11.sp)
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically) {
+            Text("Тематические папки", color = sortDeep,
+                fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            TextButton(onClick = onCategories) { Text("Все категории →", fontSize = 13.sp) }
+        }
+        val popular = groups.filter { c -> shots.any { it.category == c } }.take(2)
+        if (popular.isEmpty()) {
+            Text("После анализа здесь появятся твои категории.", color = sortMuted, fontSize = 13.sp)
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                popular.forEach { category ->
+                    Box(Modifier.weight(1f)) {
+                        SortCategoryTile(category, matchingShots(shots, category), onCategories)
+                    }
+                }
+                if (popular.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryHome(
+    shots: List<Shot>,
+    onSelect: (String) -> Unit,
+    onReview: () -> Unit,
+    onRefresh: () -> Unit
+) {
+    val cards = listOf("Все", "Без категории") + groups.drop(1)
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
-            Surface(shape = RoundedCornerShape(22.dp),
-                color = MaterialTheme.colorScheme.primaryContainer) {
-                Column(Modifier.padding(18.dp)) {
-                    Text("Найдено скриншотов", fontSize = 14.sp)
-                    Text("${shots.size}", fontSize = 36.sp, fontWeight = FontWeight.Black)
-                    Text("Оставлено $kept · В очереди $queued", fontSize = 13.sp)
-                    Spacer(Modifier.height(10.dp))
-                    LinearProgressIndicator(
-                        progress = { if (shots.isEmpty()) 0f else finished.toFloat() / shots.size },
-                        modifier = Modifier.fillMaxWidth().height(6.dp)
-                    )
-                    Text("Разобрано $finished из ${shots.size}", fontSize = 12.sp)
-                    Spacer(Modifier.height(10.dp))
-                    Button(onClick = onReview, modifier = Modifier.fillMaxWidth(), enabled = shots.isNotEmpty()) {
-                        Text("Начать разбор всех скриншотов →")
-                    }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Text("Категории", color = sortDeep, fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold)
+                    Text("Найди нужное за секунды", color = sortMuted, fontSize = 12.sp)
                 }
-            }
-        }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            Surface(shape = RoundedCornerShape(18.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer) {
-                Column(Modifier.padding(14.dp)) {
-                    Text("Умная сортировка", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Text("Текст и изображение оцениваются вместе. " +
-                        "Категории с низкой уверенностью помечаются для проверки. " +
-                        "Всё работает локально, без отправки фото в интернет.", fontSize = 12.sp)
-                    Text("Версия 0.5 повторно проверит старые файлы «Без категории». " +
-                        "Ручные назначения не меняются.", fontSize = 11.sp)
-                    Spacer(Modifier.height(5.dp))
-                    Text("Проверено алгоритмом 0.5: $classificationCompleted · ожидают: $classificationRemaining", fontSize = 12.sp)
-                    classificationStatus?.let { Text(it, fontSize = 12.sp) }
-                    Spacer(Modifier.height(8.dp))
-                    if (classificationActive) {
-                        LinearProgressIndicator(Modifier.fillMaxWidth())
-                        TextButton(onClick = onStopAutoSort) { Text("Остановить") }
-                    } else {
-                        Button(onClick = onAutoSort, enabled = classificationRemaining > 0,
-                            modifier = Modifier.fillMaxWidth()) { Text("Пробная сортировка · 40 скриншотов") }
-                        OutlinedButton(onClick = onAutoSortAll,
-                            enabled = classificationRemaining > 0,
-                            modifier = Modifier.fillMaxWidth()) { Text("Сортировать всё оставшееся") }
-                        Text("При большой галерее это длительная операция. " +
-                            "Держи приложение открытым; результаты сохраняются по мере обработки.", fontSize = 11.sp)
-                    }
-                }
-            }
-        }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically) {
-                Text("Тематические папки", fontSize = 21.sp, fontWeight = FontWeight.Bold)
                 TextButton(onClick = onRefresh) { Text("Обновить") }
             }
         }
-        items(cards, key = { it }) { cat ->
-            val contents = matchingShots(shots, cat)
-            Card(onClick = { onSelect(cat) }, modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Box(Modifier.fillMaxWidth().height(104.dp)) {
-                    if (contents.isNotEmpty()) {
-                        AsyncImage(model = contents.first().uri, contentDescription = null,
-                            contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                    } else {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(categoryEmoji(cat), fontSize = 41.sp)
-                        }
-                    }
-                }
-                Column(Modifier.padding(12.dp)) {
-                    Text(cat, fontWeight = FontWeight.SemiBold, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis)
-                    Spacer(Modifier.height(3.dp))
-                    Text("${contents.size} · ${formatSize(contents.sumOf { it.size })}",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                    val reviewCount = contents.count { it.needsReview }
-                    if (reviewCount > 0) {
-                        Text("Проверить: $reviewCount", fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.primary)
-                    }
+        items(cards, key = { it }) { category ->
+            SortCategoryTile(category, matchingShots(shots, category)) { onSelect(category) }
+        }
+    }
+}
+
+@Composable
+private fun SortCategoryTile(category: String, contents: List<Shot>, onClick: () -> Unit) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = sortCream),
+        border = androidx.compose.foundation.BorderStroke(1.dp, sortLine),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
+        Box(Modifier.fillMaxWidth().height(112.dp)) {
+            if (contents.isNotEmpty()) {
+                AsyncImage(model = contents.first().uri, contentDescription = null,
+                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            } else {
+                Box(Modifier.fillMaxSize().background(Color(0xFFF1E8D8)),
+                    contentAlignment = Alignment.Center) {
+                    Text(categoryEmoji(category), fontSize = 38.sp)
                 }
             }
+        }
+        Column(Modifier.padding(12.dp)) {
+            Text(category, fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                color = sortDeep, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("${contents.size} · ${formatSize(contents.sumOf { it.size })}",
+                color = sortMuted, fontSize = 11.sp)
+            val reviewCount = contents.count { it.needsReview }
+            if (reviewCount > 0) Text("Проверить: $reviewCount", fontSize = 11.sp,
+                color = sortRed)
         }
     }
 }
@@ -516,7 +653,7 @@ private fun CategoryDetail(category: String, shots: List<Shot>,
             verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("← Назад") }
             Text(category, fontWeight = FontWeight.Bold, maxLines = 1,
-                overflow = TextOverflow.Ellipsis, fontSize = 18.sp)
+                overflow = TextOverflow.Ellipsis, fontSize = 20.sp, color = sortDeep)
         }
         Text("${shots.size} файлов · ${formatSize(shots.sumOf { it.size })}",
             modifier = Modifier.padding(start = 20.dp, bottom = 8.dp),
@@ -570,7 +707,7 @@ private fun ReviewScreen(shots: List<Shot>, chosenCategory: String,
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Разбор", fontWeight = FontWeight.Bold, fontSize = 22.sp)
+            Text("Разбор", fontWeight = FontWeight.Bold, fontSize = 25.sp, color = sortDeep)
             Box {
                 TextButton(onClick = { showOptions = true }) {
                     Text("$chosenCategory ▾")
@@ -604,8 +741,13 @@ private fun ReviewScreen(shots: List<Shot>, chosenCategory: String,
             }
         } else {
             val count = candidates.count { it.decision == Decision.NEW }
-            Text("Осталось $count · ← удалить / → оставить / ↑ отложить",
-                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            Text("Осталось $count · из ${candidates.size}", color = sortMuted, fontSize = 12.sp)
+            Spacer(Modifier.height(8.dp))
+            LinearProgressIndicator(progress = {
+                if (candidates.isEmpty()) 0f
+                else (candidates.size - count).toFloat() / candidates.size
+            }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(99.dp)),
+                color = sortGreen, trackColor = sortLine)
             Spacer(Modifier.height(12.dp))
             Box(
                 modifier = Modifier.weight(1f).fillMaxWidth()
@@ -633,10 +775,11 @@ private fun ReviewScreen(shots: List<Shot>, chosenCategory: String,
                                 }
                             )
                         },
-                    shape = RoundedCornerShape(22.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                    shape = RoundedCornerShape(23.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, sortGold.copy(alpha = .65f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                 ) {
-                    Box(Modifier.fillMaxSize().background(Color(0xFF1B1924))) {
+                    Box(Modifier.fillMaxSize().background(sortCream)) {
                         AsyncImage(
                             model = current.uri,
                             contentDescription = current.name,
@@ -657,17 +800,30 @@ private fun ReviewScreen(shots: List<Shot>, chosenCategory: String,
                     }
                 }
             }
-            TextButton(onClick = { onAssign(current) }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                Text("🏷️ Категория: ${current.category} · изменить", fontSize = 13.sp)
+            Surface(
+                onClick = { onAssign(current) },
+                color = sortCream, shape = RoundedCornerShape(24.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, sortLine),
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            ) {
+                Text("Категория: ${current.category}  ▾", fontSize = 12.sp,
+                    color = sortDeep, modifier = Modifier.padding(horizontal = 17.dp, vertical = 10.dp))
             }
+            Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { onDecision(current, Decision.PENDING_DELETE) },
-                    modifier = Modifier.weight(1f)) { Text("🗑️ Удалить", fontSize = 12.sp) }
-                OutlinedButton(onClick = { onDecision(current, Decision.SKIPPED) },
-                    modifier = Modifier.weight(1f)) { Text("⏳ Позже", fontSize = 12.sp) }
-                Button(onClick = { onDecision(current, Decision.KEEP) },
-                    modifier = Modifier.weight(1f)) { Text("✓ Оставить", fontSize = 12.sp) }
+                horizontalArrangement = Arrangement.SpaceEvenly) {
+                SortDecisionButton(R.drawable.sort_trash, "Удалить",
+                    sortRed, Color(0xFFFCEAE5)) {
+                    onDecision(current, Decision.PENDING_DELETE)
+                }
+                SortDecisionButton(R.drawable.sort_clock, "Позже",
+                    sortDeep, Color(0xFFF0EBE1)) {
+                    onDecision(current, Decision.SKIPPED)
+                }
+                SortDecisionButton(R.drawable.sort_check, "Оставить",
+                    sortGreen, Color(0xFFDEEEE2)) {
+                    onDecision(current, Decision.KEEP)
+                }
             }
         }
     }
@@ -677,7 +833,7 @@ private fun ReviewScreen(shots: List<Shot>, chosenCategory: String,
 private fun QueueScreen(shots: List<Shot>, onRestore: (Shot) -> Unit, onTrash: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Spacer(Modifier.height(16.dp))
-        Text("Очередь удаления", fontSize = 23.sp, fontWeight = FontWeight.Bold)
+        Text("Корзина", fontSize = 25.sp, fontWeight = FontWeight.Bold, color = sortDeep)
         Text("${shots.size} файлов · ${formatSize(shots.sumOf { it.size })}",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(6.dp))
@@ -688,8 +844,13 @@ private fun QueueScreen(shots: List<Shot>, onRestore: (Shot) -> Unit, onTrash: (
             Column(Modifier.weight(1f).fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center) {
-                Text("🧹", fontSize = 64.sp)
-                Text("Здесь пока пусто", fontWeight = FontWeight.SemiBold)
+                Image(painterResource(R.drawable.sort_mark), contentDescription = null,
+                    modifier = Modifier.size(116.dp))
+                Spacer(Modifier.height(12.dp))
+                Text("В корзине 0 файлов", fontSize = 21.sp,
+                    color = sortDeep, fontWeight = FontWeight.Bold)
+                Text("Здесь будут скриншоты, которые ты решишь удалить",
+                    textAlign = TextAlign.Center, color = sortMuted, fontSize = 13.sp)
             }
         } else {
             LazyVerticalGrid(
@@ -713,8 +874,33 @@ private fun QueueScreen(shots: List<Shot>, onRestore: (Shot) -> Unit, onTrash: (
         }
         Button(onClick = onTrash, enabled = shots.isNotEmpty(),
             modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+            Icon(painterResource(R.drawable.sort_trash), contentDescription = null,
+                modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(9.dp))
             Text("Переместить в корзину Android")
         }
+    }
+}
+
+@Composable
+private fun SortDecisionButton(
+    drawable: Int,
+    title: String,
+    color: Color,
+    background: Color,
+    onClick: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(onClick = onClick, color = background, shape = RoundedCornerShape(50),
+            border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = .16f)),
+            modifier = Modifier.size(60.dp)) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(painterResource(drawable), contentDescription = title,
+                    tint = color, modifier = Modifier.size(28.dp))
+            }
+        }
+        Spacer(Modifier.height(5.dp))
+        Text(title, color = color, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 

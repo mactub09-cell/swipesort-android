@@ -14,8 +14,8 @@ android {
         applicationId = "com.swipesort.app.beta"
         minSdk = 30
         targetSdk = 35
-        versionCode = 501
-        versionName = "0.5.1-beta"
+        versionCode = 502
+        versionName = "0.6.0-sort-design"
     }
     buildFeatures { compose = true }
     compileOptions {
