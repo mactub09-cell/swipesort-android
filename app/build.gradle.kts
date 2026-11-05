@@ -9,13 +9,14 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.swipesort.app"
+        // One-time alternate package name: preserves existing SwipeSort and all its app data.
+        // All future preview builds KEEP this applicationId and reuse the same signing key.
+        applicationId = "com.swipesort.app.preview"
         minSdk = 30
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.4.0"
+        versionCode = 5
+        versionName = "0.4.1-preview"
     }
-
     buildFeatures { compose = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -23,7 +24,6 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 }
-
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.06.00"))
     implementation("androidx.activity:activity-compose:1.10.1")

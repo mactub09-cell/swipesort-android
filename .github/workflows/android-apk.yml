@@ -20,6 +20,19 @@ jobs:
           gradle-version: '8.13'
       - name: Install Android SDK platform
         run: yes | sdkmanager 'platforms;android-35' 'build-tools;35.0.0' || true
+      - name: Restore consistent debug signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.SWIPESORT_DEBUG_KEY_B64 }}
+        shell: bash
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo '::error::Missing SWIPESORT_DEBUG_KEY_B64 repository Actions secret.'
+            exit 1
+          fi
+          mkdir -p "$HOME/.android"
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey >/dev/null
       - name: Build debug APK
         run: gradle --no-daemon --stacktrace :app:assembleDebug
       - name: Verify APK has no network permission
@@ -29,13 +42,14 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump permissions "$APK" | tee /tmp/swipesort-permissions.txt
           if grep -q 'android.permission.INTERNET' /tmp/swipesort-permissions.txt; then
-            echo 'Security check failed: INTERNET permission was merged into the APK' >&2
+            echo '::error::Internet permission unexpectedly merged into APK' >&2
             exit 1
           fi
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK"
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: SwipeSort-debug-APK
+          name: SwipeSort-PREVIEW-stable-signature-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
