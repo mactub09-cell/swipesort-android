@@ -8,7 +8,7 @@
     <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
     <application
         android:allowBackup="false"
-        android:label="SwipeSort Тест"
+        android:label="SwipeSort Бета"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity

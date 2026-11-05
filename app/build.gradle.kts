@@ -11,11 +11,11 @@ android {
     defaultConfig {
         // One-time alternate package name: preserves existing SwipeSort and all its app data.
         // All future preview builds KEEP this applicationId and reuse the same signing key.
-        applicationId = "com.swipesort.app.preview"
+        applicationId = "com.swipesort.app.beta"
         minSdk = 30
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.5.0-preview"
+        versionCode = 501
+        versionName = "0.5.1-beta"
     }
     buildFeatures { compose = true }
     compileOptions {
